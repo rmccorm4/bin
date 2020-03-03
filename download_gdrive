@@ -1,0 +1,54 @@
+#!/usr/bin/env python3
+import requests
+from tqdm import tqdm
+
+# https://github.com/chentinghao/download_google_drive
+def download_file_from_google_drive(file_id, destination, size=None):
+    """
+    Args:
+        file_id (str): ID of the Google Drive file to download.
+        destination (path): Path to save the downloaded file to.
+        size (int): Size of the requested file in bytes for a better progress bar.
+    """
+    def get_confirm_token(response):
+        for key, value in response.cookies.items():
+            if key.startswith('download_warning'):
+                return value
+
+        return None
+
+    def save_response_content(response, destination):
+        CHUNK_SIZE = 32768
+
+        with open(destination, "wb") as f:
+            with tqdm(total=size, unit='B', unit_scale=True, unit_divisor=1024) as bar:
+                for chunk in response.iter_content(CHUNK_SIZE):
+                    if chunk:  # filter out keep-alive new chunks
+                        f.write(chunk)
+                        bar.update(CHUNK_SIZE)
+
+    URL = "https://docs.google.com/uc?export=download"
+
+    session = requests.Session()
+
+    response = session.get(URL, params = { 'id' : file_id }, stream = True)
+    token = get_confirm_token(response)
+
+    if token:
+        params = { 'id' : file_id, 'confirm' : token }
+        response = session.get(URL, params = params, stream = True)
+
+    save_response_content(response, destination)    
+
+if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser("Download files from Google Drive based on their File ID.")
+    parser.add_argument("--id", required=True, type=str,
+          help="File ID of file to download from Google Drive.")
+    parser.add_argument("-o", "--output", default=None, type=str, required=True,
+          help="Output path for downloaded file.")
+    parser.add_argument("-s", "--size", default=None, type=int, required=False,
+          help="Size of the file in bytes for a more informative progress bar.") 
+    args = parser.parse_args()
+
+    download_file_from_google_drive(args.id, args.output, args.size)
